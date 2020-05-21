@@ -1,43 +1,37 @@
 ﻿using Microsoft.Win32;
 using NAudio.CoreAudioApi;
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
 using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace QuietOnTheSetUI
 {
     public partial class Form1 : Form
     {
-        MMDeviceEnumerator MMDE = new MMDeviceEnumerator();
-        MMDevice mmDevice;
-        private bool _isLocked = false;
+        private readonly MMDeviceEnumerator _mmde = new MMDeviceEnumerator();
+        private readonly MMDevice _mmDevice;
+        private bool _isLocked;
         private string _password;
         private int _maxVolume;
-        private bool _exitAllowed = false;
+        private bool _exitAllowed;
 
         public Form1()
         {
             InitializeComponent();
-            //            Bitmap applicationIcon = QuietOnTheSetUI.Properties.Resources.appicon;
-            this.Icon = QuietOnTheSetUI.Properties.Resources.appicon;
-            mmDevice = MMDE.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-            notifyIcon1.Icon = QuietOnTheSetUI.Properties.Resources.appicon;
+
+            Icon = Properties.Resources.appicon;
+            _mmDevice = _mmde.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            notifyIcon1.Icon = Properties.Resources.appicon;
             volumeTrackBar.ValueChanged += VolumeTrackBar_ValueChanged;
-            mmDevice.AudioEndpointVolume.OnVolumeNotification += AudioEndpointVolume_OnVolumeNotification;
+            _mmDevice.AudioEndpointVolume.OnVolumeNotification += AudioEndpointVolume_OnVolumeNotification;
             _maxVolume = Convert.ToInt16(Properties.Settings.Default["MaxVolume"]);
             volumeTrackBar.Value = _maxVolume;
             _isLocked = Convert.ToBoolean(Properties.Settings.Default["IsLocked"]);
             _password = Properties.Settings.Default["UnlockCode"].ToString();
-            currentVolumeLabel.Text = Convert.ToInt16(mmDevice.AudioEndpointVolume.MasterVolumeLevelScalar * 100).ToString();
-            notifyIcon1.BalloonTipTitle = $"Quiet on the Set";
+            currentVolumeLabel.Text = Convert.ToInt16(_mmDevice.AudioEndpointVolume.MasterVolumeLevelScalar * 100).ToString();
+            notifyIcon1.BalloonTipTitle = @"Quiet on the Set";
+
             if (_isLocked)
             {
                 LockVolume(true);
@@ -47,29 +41,19 @@ namespace QuietOnTheSetUI
                 UnlockVolume();
             }
 
-            this.FormClosing += Form1_FormClosing;
-            this.Resize += Form1_Resize;
-
-            UpdateFooter();
-        }
-
-        private void UpdateFooter()
-        {
-            var version = Assembly.GetExecutingAssembly().GetName().Version;
-            DateTime buildDate = new FileInfo(Assembly.GetExecutingAssembly().Location).LastWriteTime;
-
-            footerLabel.Text = $"v{version} was built {buildDate.ToString("g")}";
+            FormClosing += Form1_FormClosing;
+            Resize += Form1_Resize;
         }
 
         private void Form1_Resize(object sender, EventArgs e)
         {
-            if (FormWindowState.Minimized == this.WindowState)
+            if (FormWindowState.Minimized == WindowState)
             {
                 notifyIcon1.Visible = true;
                 notifyIcon1.ShowBalloonTip(500);
-                this.Hide();
+                Hide();
             }
-            else if (FormWindowState.Normal == this.WindowState)
+            else if (FormWindowState.Normal == WindowState)
             {
                 notifyIcon1.Visible = false;
             }
@@ -80,14 +64,14 @@ namespace QuietOnTheSetUI
             if (_exitAllowed == false)
             {
                 e.Cancel = true;
-                this.WindowState = FormWindowState.Minimized;
+                WindowState = FormWindowState.Minimized;
             }
         }
 
-        internal void LockVolume (bool initializing=false)
+        private void LockVolume (bool initializing=false)
         {
             _isLocked = true;
-            lockButton.Text = "Unlock";
+            lockButton.Text = @"Unlock";
             volumeTrackBar.Enabled = false;
             if (!initializing)
             {
@@ -100,62 +84,48 @@ namespace QuietOnTheSetUI
             _password = passwordTextBox.Text;
             passwordTextBox.Text = string.Empty;
             confirmPasswordTextBox.Text = string.Empty;
-            notifyIcon1.BalloonTipText = _balloonTipText;
-            notifyIcon1.Text = _balloonTipText;
+            notifyIcon1.BalloonTipText = BalloonTipText;
+            notifyIcon1.Text = BalloonTipText;
             if (_password.Length > 0) { lockButton.Enabled = false; }
-            exitButton.Visible = false;
+            exitButton.Enabled = false;
             SetMaxVolume();
         }
-        internal void UnlockVolume()
+
+        private void UnlockVolume()
         {
             _isLocked = false;
-            lockButton.Text = "Lock";
+            lockButton.Text = @"Lock";
             volumeTrackBar.Enabled = true;
             Properties.Settings.Default["IsLocked"] = false;
             Properties.Settings.Default["UnlockCode"] = string.Empty;
             Properties.Settings.Default.Save();
             passwordTextBox.Text = string.Empty;
             confirmPasswordTextBox.Text = string.Empty;
-            notifyIcon1.BalloonTipText = _balloonTipText;
-            notifyIcon1.Text = _balloonTipText;
-            exitButton.Visible = true;
+            notifyIcon1.BalloonTipText = BalloonTipText;
+            notifyIcon1.Text = BalloonTipText;
+            exitButton.Enabled = true;
             _password = string.Empty;
         }
 
-        private string _balloonTipText
-        {
-            get
-            {
-                if (_isLocked)
-                {
-                    return $"Maximum volume locked at {volumeTrackBar.Value}";
-                }
-                else
-                {
-                    return $"No maximum volume is currently set";
-                }
-            }
-        }
+        private string BalloonTipText => _isLocked ? $"Maximum volume locked at {volumeTrackBar.Value}" : "No maximum volume is currently set";
 
         private void SetMaxVolume()
         {
-            if (mmDevice.AudioEndpointVolume.MasterVolumeLevelScalar > (_maxVolume / 100f))
+            if (_mmDevice.AudioEndpointVolume.MasterVolumeLevelScalar > _maxVolume / 100f)
             {
-                mmDevice.AudioEndpointVolume.MasterVolumeLevelScalar = _maxVolume / 100f;
+                _mmDevice.AudioEndpointVolume.MasterVolumeLevelScalar = _maxVolume / 100f;
             }
         }
 
         private void AudioEndpointVolume_OnVolumeNotification(AudioVolumeNotificationData data)
         {
-            var newVolume = Convert.ToInt16(data.MasterVolume * 100);
+            var newVolume = Convert.ToInt32(data.MasterVolume * 100);
             if (_isLocked && newVolume >  _maxVolume)
             {
                 SetMaxVolume();
             }
-            if (currentVolumeLabel.InvokeRequired)
-            {
-                currentVolumeLabel.Invoke(new MethodInvoker(delegate { currentVolumeLabel.Text = newVolume.ToString() ; }));
-            }
+
+            currentVolumeLabel.Invoke(new MethodInvoker(delegate { currentVolumeLabel.Text = newVolume.ToString(); }));
         }
 
         private void VolumeTrackBar_ValueChanged(object sender, EventArgs e)
@@ -191,7 +161,7 @@ namespace QuietOnTheSetUI
             ValidatePasswords();
         }
 
-        internal void ValidatePasswords()
+        private void ValidatePasswords()
         {
             if (_isLocked)
             {
@@ -214,39 +184,35 @@ namespace QuietOnTheSetUI
         {
             // Show must be called before setting WindowState,
             // otherwise the window loses its size and position
-            this.Show();
-            this.WindowState = FormWindowState.Normal;
-            MaxmizedFromTray();
+            Show();
+            WindowState = FormWindowState.Normal;
+            MaximizedFromTray();
         }
 
-        private void MaxmizedFromTray()
+        private void MaximizedFromTray()
         {
             notifyIcon1.Visible = false;
         }
 
         private void exitButton_Click(object sender, EventArgs e)
         {
-            var response = MessageBox.Show("This will completely shut down the volume control so users can set the volume as loud as they want. Are you sure you want to exit?", "Warning", MessageBoxButtons.YesNo);
-            if (response == DialogResult.Yes)
-            {
-                _exitAllowed = true;
-                Application.Exit();
-            }
+            Application.Exit();
         }
 
         private void checkBox1_CheckedChanged(object sender, EventArgs e)
         {
-            RegistryKey rk = Registry.CurrentUser.OpenSubKey
+            var rk = Registry.CurrentUser.OpenSubKey
                 ("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
 
             if (checkBox1.Checked)
             {
-                rk.SetValue("QuietOnTheSet", Application.ExecutablePath.ToString());
+                rk?.SetValue("QuietOnTheSet", Application.ExecutablePath);
             }
             else
             {
-                rk.DeleteValue("QuietOnTheSet", false);
+                rk?.DeleteValue("QuietOnTheSet", false);
             }
         }
+
     }
 }
